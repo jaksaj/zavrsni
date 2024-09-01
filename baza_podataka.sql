@@ -44,10 +44,7 @@ CREATE TABLE Djelatnik (
 
 -- Table AkademskaGodina
 CREATE TABLE AkademskaGodina (
-    id INT IDENTITY(1,1) PRIMARY KEY,
-    naziv VARCHAR(100),
-    godinaPocetak INT,
-    godinaZavrsetak INT
+    godinaPocetak INT PRIMARY KEY
 );
 
 -- Table KolegijGodina
@@ -55,8 +52,9 @@ CREATE TABLE KolegijGodina (
     id INT IDENTITY(1,1) PRIMARY KEY,
     kolegijId INT,
     akademskaGodinaId INT,
+    erasmusStudenti INT,
     FOREIGN KEY (kolegijId) REFERENCES Kolegij(isvu),
-    FOREIGN KEY (akademskaGodinaId) REFERENCES AkademskaGodina(id)
+    FOREIGN KEY (akademskaGodinaId) REFERENCES AkademskaGodina(godinaPocetak)
 );
 
 -- Table NositeljKolegij
@@ -74,15 +72,14 @@ CREATE TABLE SemestarGodina (
     semestarId INT,
     akademskaGodinaId INT,
     FOREIGN KEY (semestarId) REFERENCES Semestar(id),
-    FOREIGN KEY (akademskaGodinaId) REFERENCES AkademskaGodina(id)
+    FOREIGN KEY (akademskaGodinaId) REFERENCES AkademskaGodina(godinaPocetak)
 );
 
 -- Table SemestarKolegij
 CREATE TABLE SemestarKolegij (
     kolegijId INT,
     semestarId INT,
-    erasmusStudenti INT,
-    obavezan BIT,
+    obvezan BIT,
     PRIMARY KEY (kolegijId, semestarId),
     FOREIGN KEY (kolegijId) REFERENCES KolegijGodina(id),
     FOREIGN KEY (semestarId) REFERENCES SemestarGodina(id)

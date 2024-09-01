@@ -83,20 +83,19 @@ def save_to_db_without_check(cursor, conn, table_name, columns, data):
         cursor.executemany(sql_statement, data)
         conn.commit()
 
-def update_foreign_key(cursor,id, column_name, foreign_table, foreign_column, data_list):
+def mapirajStraniKljuc(cursor,id, column_name, foreign_table, foreign_column, data_list):
     for item in data_list:
         cursor.execute(f"SELECT {id} FROM {foreign_table} WHERE {foreign_column} = ?", (item[column_name],))
         foreign_id = cursor.fetchone()[0]
         item[column_name] = foreign_id
 
-def prompt_for_academic_year():
+def unosGodine():
     while True:
-        start_year = input("Enter the start year of the academic year: ")
-        end_year = input("Enter the end year of the academic year: ")
-        print(f"You entered: Start Year = {start_year}, End Year = {end_year}")
-        confirm = input("Is this correct? (yes/no): ").strip().lower()
-        if confirm == 'yes':
-            return start_year, end_year
+        godinaPocetak = input("Unesite godinu početka akademske godine: ")
+        print(f"Unijeli ste: {godinaPocetak}")
+        potvrda = input("Je li ovo točno? (da/ne): ").strip().lower()
+        if potvrda == 'da':
+            return godinaPocetak
         
 def format_values(values):
     return [[value] for value in values]
@@ -106,7 +105,7 @@ with open('fakultetPodaci2023.JSON', 'r', encoding='utf-8') as f:
 
 try:
 
-    start_year, end_year = prompt_for_academic_year()
+    godinaPocetak = unosGodine()
 
     jsonData = json.loads(data)
 
@@ -117,26 +116,29 @@ try:
                       "charset=utf8;")
     cursor = conn.cursor()
 
-    cursor.execute('''
-    INSERT INTO AkademskaGodina (godinaPocetak, godinaZavrsetak)
-    OUTPUT INSERTED.ID
-    VALUES (?, ?)
-    ''', (start_year, end_year))
+    cursor.execute("SELECT 1 FROM AkademskaGodina WHERE godinaPocetak = ?", (godinaPocetak,))
+    exists = cursor.fetchone()
 
-    akademskaGodinaId = cursor.fetchone()[0]
+    if not exists:
+        cursor.execute('''
+            INSERT INTO AkademskaGodina (godinaPocetak)
+            VALUES (?)
+        ''', (godinaPocetak,))
 
-    razina_values = deep_search(jsonData, 'razina')
-    formatted_razina_values = format_values(razina_values)
-    save_to_db(cursor, conn, 'Razina', ['naziv'], formatted_razina_values)
+    akademskaGodinaId = godinaPocetak
 
-    tip_nastave_values = find_child_keys(jsonData, 'satnica')
-    formatted_tip_nastave_values = format_values(tip_nastave_values)
-    save_to_db(cursor, conn, 'TipNastave', ['akronim'], formatted_tip_nastave_values)
+    razine = deep_search(jsonData, 'razina')
+    razineFormatirano = format_values(razine)
+    save_to_db(cursor, conn, 'Razina', ['naziv'], razineFormatirano)
+
+    tipoviNastave = find_child_keys(jsonData, 'satnica')
+    tipoviNastaveFormatirano = format_values(tipoviNastave)
+    save_to_db(cursor, conn, 'TipNastave', ['akronim'], tipoviNastaveFormatirano)
 
     studiji = get_grandchild_values(jsonData)
-    table_studiji = []
-    table_semestri = []
-    table_kolegiji = []
+    studijiTablica = []
+    semestriTablica = []
+    kolegijiTablica = []
     for studij in studiji:
         zapis_studij = {
             'isvu': studij['Info']['ISVU'],
@@ -145,7 +147,7 @@ try:
             'naziv': studij['Info']['studij'],
             'modul': studij['Info']['modul'],
         }
-        table_studiji.append(zapis_studij)
+        studijiTablica.append(zapis_studij)
 
         for sem_key, sem_value in studij.items():
             if sem_key.isdigit():
@@ -153,7 +155,7 @@ try:
                     'studij': studij['Info']['ISVU'],
                     'semester': sem_value['semester'],
                 }
-                table_semestri.append(zapis_semestar)
+                semestriTablica.append(zapis_semestar)
                 for group_type in ["obvezni", "izborni"]:
                     group_data = sem_value.get(group_type, {})
                     if isinstance(group_data, dict):
@@ -172,31 +174,31 @@ try:
                                     "satnica": predmet_value.get("satnica"),
                                     "nositelji": predmet_value.get("nositelji"),
                                     "erasmus": predmet_value.get("erasmus"),
-                                    "obavezan": 1 if group_type == "obvezni" else 0
+                                    "obvezan": 1 if group_type == "obvezni" else 0
                                 }
-                                table_kolegiji.append(kolegij)
+                                kolegijiTablica.append(kolegij)
 
-    update_foreign_key(cursor,'id', 'razina', 'razina', 'naziv', table_studiji)
-    table_studiji = [(studij['isvu'], studij['akronim'], studij['razina'], studij['naziv'], studij['modul']) for studij in table_studiji]
-    save_to_db(cursor, conn, 'Studij', ['isvu', 'akronim', 'razinaId', 'naziv', 'modul'], table_studiji)
+    mapirajStraniKljuc(cursor,'id', 'razina', 'razina', 'naziv', studijiTablica)
+    studijiTablica = [(studij['isvu'], studij['akronim'], studij['razina'], studij['naziv'], studij['modul']) for studij in studijiTablica]
+    save_to_db(cursor, conn, 'Studij', ['isvu', 'akronim', 'razinaId', 'naziv', 'modul'], studijiTablica)
 
-    update_foreign_key(cursor,'isvu', 'studij', 'Studij', 'isvu', table_semestri)
-    table_semestri = [(semestar['studij'], semestar['semester']) for semestar in table_semestri]
-    save_to_db(cursor, conn, 'Semestar', ['studijId', 'brojSemestra'], table_semestri)
+    mapirajStraniKljuc(cursor,'isvu', 'studij', 'Studij', 'isvu', semestriTablica)
+    semestriTablica = [(semestar['studij'], semestar['semester']) for semestar in semestriTablica]
+    save_to_db(cursor, conn, 'Semestar', ['studijId', 'brojSemestra'], semestriTablica)
 
     cursor.execute("SELECT id, studijId, brojSemestra FROM Semestar")
     semestar_rows = cursor.fetchall()
 
     semestar_id_map = { (row[1], row[2]): row[0] for row in semestar_rows }
 
-    semestar_godina_data = []
-    for semestar in table_semestri:
+    semestriGodina = []
+    for semestar in semestriTablica:
         studijId = semestar[0]
         brojSemestra = semestar[1]
         semestarId = semestar_id_map[(studijId, brojSemestra)]
-        semestar_godina_data.append((semestarId, akademskaGodinaId))
+        semestriGodina.append((semestarId, akademskaGodinaId))
 
-    save_to_db_without_check(cursor, conn, 'SemestarGodina', ['semestarId', 'akademskaGodinaId'], semestar_godina_data)
+    save_to_db_without_check(cursor, conn, 'SemestarGodina', ['semestarId', 'akademskaGodinaId'], semestriGodina)
 
     unique_isvu = set()
     kolegiji = []
@@ -204,20 +206,21 @@ try:
     kolegijNositelji = []
     unique_kolegiji = []
 
-    for kolegij in table_kolegiji:
-        isvu_value = kolegij['ISVU']
-        if isvu_value not in unique_isvu:
-            unique_isvu.add(isvu_value)
+    for kolegij in kolegijiTablica:
+        isvu = kolegij['ISVU']
+        if isvu not in unique_isvu:
+            unique_isvu.add(isvu)
             unique_kolegiji.append(kolegij)
             kolegiji.append((kolegij['ISVU'], kolegij['PMkod'], kolegij['naziv'], kolegij['ECTS']))
-            kolegijiGodina.append((kolegij['ISVU'],akademskaGodinaId))
+            erasmus_value = 0 if kolegij.get('erasmus') is None else kolegij['erasmus']        
+            kolegijiGodina.append((kolegij['ISVU'],akademskaGodinaId, erasmus_value))
     
     save_to_db(cursor, conn, 'Kolegij', ['isvu', 'PMkod', 'naziv', 'ects'], kolegiji)
-    save_to_db(cursor, conn, 'KolegijGodina', ['kolegijId', 'akademskaGodinaId'], kolegijiGodina)
+    save_to_db(cursor, conn, 'KolegijGodina', ['kolegijId', 'akademskaGodinaId','erasmusStudenti'], kolegijiGodina)
 
-    djelatnici = find_child_key_values(jsonData, 'nositelji')
-    table_djelatnici = []
-    for djelatnik in djelatnici.values():
+    djelatniciPodaci = find_child_key_values(jsonData, 'nositelji')
+    djelatnici = []
+    for djelatnik in djelatniciPodaci.values():
         zapis_djelatnik = {
             'id': djelatnik['userID'],
             'firstName': djelatnik['firstName'],
@@ -225,16 +228,16 @@ try:
             'title': djelatnik['title'],
             'teachingTitle': djelatnik['teachingTitle'],
         }
-        table_djelatnici.append(zapis_djelatnik)
-    table_djelatnici = [(djelatnik['id'],djelatnik['firstName'], djelatnik['lastName'], djelatnik['title'], djelatnik['teachingTitle']) for djelatnik in table_djelatnici]
-    save_to_db(cursor, conn, 'djelatnik', ['id','ime', 'prezime', 'titula', 'nastavnaTitula'], table_djelatnici)
+        djelatnici.append(zapis_djelatnik)
+    djelatnici = [(djelatnik['id'],djelatnik['firstName'], djelatnik['lastName'], djelatnik['title'], djelatnik['teachingTitle']) for djelatnik in djelatnici]
+    save_to_db(cursor, conn, 'djelatnik', ['id','ime', 'prezime', 'titula', 'nastavnaTitula'], djelatnici)
 
     for kolegij in unique_kolegiji:
-        isvu_value = kolegij['ISVU']
-        cursor.execute("SELECT id FROM KolegijGodina WHERE kolegijId = ? AND akademskaGodinaId = ?", (isvu_value, akademskaGodinaId))
-        kolegij_godina_id_row = cursor.fetchone()
-        if kolegij_godina_id_row:
-            kolegij_godina_id = kolegij_godina_id_row[0]
+        isvu = kolegij['ISVU']
+        cursor.execute("SELECT id FROM KolegijGodina WHERE kolegijId = ? AND akademskaGodinaId = ?", (isvu, akademskaGodinaId))
+        kolegijGodinaIdRedak = cursor.fetchone()
+        if kolegijGodinaIdRedak:
+            kolegijGodinaId = kolegijGodinaIdRedak[0]
             if kolegij['satnica'] and isinstance(kolegij['satnica'], dict):
                 for tip, broj_sati in kolegij['satnica'].items():
                     cursor.execute("SELECT id FROM TipNastave WHERE akronim = ?", (tip,))
@@ -242,7 +245,7 @@ try:
                     if tip_nastave_id_row:
                         tip_nastave_id = tip_nastave_id_row[0]
                         cursor.execute("INSERT INTO KolegijNastava (tipNastaveId, kolegijId, brojSati) VALUES (?, ?, ?)",
-                                    (tip_nastave_id, kolegij_godina_id, broj_sati))
+                                    (tip_nastave_id, kolegijGodinaId, broj_sati))
             if isinstance(kolegij['nositelji'], dict):
                 for nositelj in kolegij['nositelji'].values():
                     nositelj_id = nositelj['userID']
@@ -250,34 +253,33 @@ try:
                     nositelj_id_row = cursor.fetchone()
                     if nositelj_id_row:
                         nositelj_id = nositelj_id_row[0]
-                        kolegijNositelji.append((kolegij_godina_id, nositelj_id))
+                        kolegijNositelji.append((kolegijGodinaId, nositelj_id))
 
     save_to_db(cursor, conn, 'NositeljKolegij', ['kolegijId', 'nositeljId'], kolegijNositelji)
 
-    for kolegij in table_kolegiji:
-        isvu_value = kolegij['ISVU']
-        studij_value = kolegij['studij']
-        semester_value = kolegij['semester']
-        erasmus_value = 0 if kolegij.get('erasmus') is None else kolegij['erasmus']        
-        is_obavezan = kolegij['obavezan']  # Directly use the stored obavezan value
+    for kolegij in kolegijiTablica:
+        isvu = kolegij['ISVU']
+        studij = kolegij['studij']
+        semestar = kolegij['semester']
+        obvezan = kolegij['obvezan'] 
 
-        cursor.execute("SELECT id FROM KolegijGodina WHERE kolegijId = ? AND akademskaGodinaId = ?", (isvu_value, akademskaGodinaId))
-        kolegij_godina_id_row = cursor.fetchone()
-        if kolegij_godina_id_row:
-            kolegij_godina_id = kolegij_godina_id_row[0]
+        cursor.execute("SELECT id FROM KolegijGodina WHERE kolegijId = ? AND akademskaGodinaId = ?", (isvu, akademskaGodinaId))
+        kolegijGodinaIdRedak = cursor.fetchone()
+        if kolegijGodinaIdRedak:
+            kolegijGodinaId = kolegijGodinaIdRedak[0]
             
-            cursor.execute("SELECT id FROM Semestar WHERE studijId = ? AND brojSemestra = ?", (studij_value, semester_value))
-            semestar_id_row = cursor.fetchone()
-            if semestar_id_row:
-                semestar_id = semestar_id_row[0]
+            cursor.execute("SELECT id FROM Semestar WHERE studijId = ? AND brojSemestra = ?", (studij, semestar))
+            semestarIdRedak = cursor.fetchone()
+            if semestarIdRedak:
+                semestarId = semestarIdRedak[0]
 
-                cursor.execute("SELECT id FROM SemestarGodina WHERE semestarId = ? AND akademskaGodinaId = ?", (semestar_id, akademskaGodinaId))
-                semestar_godina_id_row = cursor.fetchone()
-                if semestar_godina_id_row:
-                    semestar_godina_id = semestar_godina_id_row[0]
+                cursor.execute("SELECT id FROM SemestarGodina WHERE semestarId = ? AND akademskaGodinaId = ?", (semestarId, akademskaGodinaId))
+                semestarGodinaIdRedak = cursor.fetchone()
+                if semestarGodinaIdRedak:
+                    semestarGodinaId = semestarGodinaIdRedak[0]
 
-                    cursor.execute("INSERT INTO SemestarKolegij (kolegijId, semestarId, erasmusStudenti, obavezan) VALUES (?, ?, ?, ?)",
-                                (kolegij_godina_id, semestar_godina_id, erasmus_value, is_obavezan))
+                    cursor.execute("INSERT INTO SemestarKolegij (kolegijId, semestarId, obvezan) VALUES (?, ?, ?)",
+                                (kolegijGodinaId, semestarGodinaId, obvezan))
 
     conn.commit()
     cursor.close()
